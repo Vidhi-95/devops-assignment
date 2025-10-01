@@ -1,0 +1,8 @@
+apiVersion: v2
+name: webapp
+description: Service and Deployment Helm charts for webapp
+version: 0.1.0
+appVersion: "1.0.0"
+maintainers:
+  - name: Abc
+    email: abc@gmail.com # Test email

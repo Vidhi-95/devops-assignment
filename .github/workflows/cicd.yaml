@@ -1,0 +1,82 @@
+name: CICD Pipeline for Python Hello App
+
+on:
+  push:
+    branches:
+      - main   # Trigger when changes are pushed to main branch
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest # runner name
+
+    env:
+      IMAGE_NAME: vidhirepo/helloapp    #Docker registry repo
+      K8S_NAMESPACE: default         # Kubernetes namespace to deploy to
+      HELM_RELEASE: helloapp         # Helm release name
+      HELM_CHART_PATH: ./charts/app  # Path to your Helm chart
+      REGISTRY: abc-docker.io
+
+    steps:
+      # Checkout the repo
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Run unit tests
+      - name: Run tests
+        run: python -m unittest discover -s helloapp -p "*.py"
+
+      # Log in to Docker registry
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: {{env.REGISTRY}} # Every company will have their own registry URL
+          username: ${{ secrets.DOCKER_USERNAME }} #This should be added first in Github secrets.It can be any artifactory where you are pushing your image. E.g. DockerHub, JFrog
+          password: ${{ secrets.DOCKER_PASSWORD }} #This should be added first in Github secrets
+          logout: true 
+
+      # Build Docker image
+      - name: Build Docker image
+        run: docker build -t ${{env.REGISTRY}}/${{env.IMAGE_NAME}}:${{ github.sha }} . #Alternatively can use semver versioning istead of gitsha. Use Gitversion.tool for semver
+
+      # Push Docker image
+      - name: Push Docker image
+        run: docker push ${{env.REGISTRY}}/${{env.IMAGE_NAME}}:${{ github.sha }}
+
+      # Set up kubectl
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.27.0'
+
+      # Set up Helm
+      - name: Set up Helm
+        uses: helm/helm@v3
+        with:
+          version: v3.12.1
+
+      # Step 11: Deploy Helm chart
+      - name: Deploy to Kubernetes
+        env:
+          KUBECONFIG: ${{ secrets.KUBECONFIG }}   # Storing K8s config as a github secret
+        run: |
+          helm upgrade --install $HELM_RELEASE $HELM_CHART_PATH \
+            --namespace $K8S_NAMESPACE \
+            --set image.repository=$IMAGE_NAME \
+            --set image.tag=${{ github.sha }} \
+            --wait
+
+# Here I am writing both ci and cd as part of single pipeline. In real world scenario, these should be two different pipelines. 
+# The CI pipeline in the code repo will run and push the images and perform unit tests and it will call the CD repo and update the tag in argocd file and the gitops operator will detect the changes and deploy.
+# Also, we can add more steps like security scanning, code quality checks, integration tests, etc as per requirement.

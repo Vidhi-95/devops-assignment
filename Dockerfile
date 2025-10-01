@@ -7,7 +7,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Installing dependencies
-RUN pip install --no-cache-dir -r requirements.txt gunicorn
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY helloapp/ ./helloapp/
